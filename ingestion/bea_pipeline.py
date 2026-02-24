@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from datetime import date, datetime
+from datetime import date, datetime, UTC
 from typing import Generator
 
 import requests
@@ -246,28 +246,28 @@ class BEAClient:
 
 # ── Parsing Utilities ─────────────────────────────────────────────────────────
 
-def parse_bea_period(period_str: str, frequency: str) -> str | None:
+def parse_bea_period(period_str: str, frequency: str) -> date | None:
     """
     Convert BEA period strings to ISO dates.
 
     BEA formats:
-      Annual:    '2023'         → '2023-01-01'
-      Quarterly: '2023Q1'       → '2023-01-01'
-      Monthly:   '2023M01'      → '2023-01-01'
+      Annual:    '2023'         → date(2023, 1, 1)
+      Quarterly: '2023Q1'       → date(2023, 1, 1)
+      Monthly:   '2023M01'      → date(2023, 1, 1)
     """
     try:
         if frequency == "A":
-            return f"{period_str}-01-01"
+            return date(int(period_str), 1, 1)
 
         elif frequency == "Q":
-            year, q = period_str[:4], period_str[5]
-            month = {"1": "01", "2": "04", "3": "07", "4": "10"}[q]
-            return f"{year}-{month}-01"
+            year, q = int(period_str[:4]), period_str[5]
+            month = {"1": 1, "2": 4, "3": 7, "4": 10}[q]
+            return date(year, month, 1)
 
         elif frequency == "M":
-            year  = period_str[:4]
-            month = period_str[5:7]
-            return f"{year}-{month}-01"
+            year  = int(period_str[:4])
+            month = int(period_str[5:7])
+            return date(year, month, 1)
 
     except Exception:
         pass
@@ -318,10 +318,12 @@ class BEAPipeline(BasePipeline):
             f"({table_cfg['table_name']}, {table_cfg['frequency']})"
         )
 
+        year_param = "X" if table_cfg["frequency"] == "M" else self._year_range_str()
+
         results = self.client.get_nipa(
             table_name=table_cfg["table_name"],
             frequency=table_cfg["frequency"],
-            year=self._year_range_str(),
+            year=year_param,
         )
 
         raw_data = results.get("Data", [])
@@ -394,7 +396,7 @@ class BEAPipeline(BasePipeline):
                         "description":     table_cfg["description"],
                         "source":          "bea",
                         # Audit
-                        "ingested_at":     datetime.utcnow().isoformat(),
+                        "ingested_at":     datetime.now(UTC).isoformat(),
                         "pipeline_version": "1.0.0",
                     }
 

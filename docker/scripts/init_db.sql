@@ -2,6 +2,9 @@
 -- PostgreSQL init script run once on first container startup via /docker-entrypoint-initdb.d/
 -- Creates schemas and stub tables so Airflow healthchecks pass before ingestion runs.
 
+CREATE DATABASE airflow_db;
+\c airflow_db;
+
 CREATE SCHEMA IF NOT EXISTS raw;
 CREATE SCHEMA IF NOT EXISTS staging;
 CREATE SCHEMA IF NOT EXISTS marts;

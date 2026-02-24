@@ -127,7 +127,6 @@ econ-data-pipeline/
 │       ├── staging/
 │       │   ├── stg_bea_observations.sql
 │       │   ├── stg_fred_observations.sql
-│       │   ├── stg_market_prices.sql
 │       │   ├── sources.yml
 │       │   └── schema.yml
 │       └── marts/forecasting/
@@ -356,13 +355,11 @@ http://localhost:8080  →  admin / admin
 ```
 raw schema  (loaded by dlt)
   ├── bea_nipa_observations
-  ├── fred_observations
-  └── market_prices
+  └── fred_observations
 
 staging schema  (dbt views — cleaned, typed, deduplicated)
   ├── stg_bea_observations
-  ├── stg_fred_observations
-  └── stg_market_prices
+  └── stg_fred_observations
 
 marts.forecasting  (dbt tables)
   └── fct_macro_indicators_monthly
@@ -384,9 +381,6 @@ marts.forecasting  (dbt tables)
                  payrolls_mom_change_thousands
                  pce_services_goods_ratio
                  gdp_output_gap_proxy
-
-        Markets: sp500_close_avg · vix_avg · usd_index_avg
-                 wti_oil_avg · gold_avg · sp500_realised_vol
 ```
 
 ---

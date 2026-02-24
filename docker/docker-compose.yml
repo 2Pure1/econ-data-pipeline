@@ -58,7 +58,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - "./docker/scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-econ_user} -d ${POSTGRES_DB:-econ_warehouse}" ]
       interval: 10s
@@ -71,8 +70,8 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@econ.local
-      PGADMIN_DEFAULT_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+      PGADMIN_DEFAULT_EMAIL: admin@bey-zone.com
+      PGADMIN_DEFAULT_PASSWORD: beybey
     ports:
       - "5050:80"
     depends_on:
@@ -84,16 +83,7 @@ services:
   airflow-init:
     <<: *airflow-common
     command: >
-      bash -c "
-        airflow db migrate &&
-        airflow users create
-          --username admin
-          --firstname Admin
-          --lastname User
-          --role Admin
-          --email admin@econ.local
-          --password ${AIRFLOW_ADMIN_PASSWORD:-admin}
-      "
+      bash -c "airflow db migrate && airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@econ.local --password $${AIRFLOW_ADMIN_PASSWORD:-admin}"
     restart: on-failure
 
   # ── Airflow Webserver ─────────────────────────────────────────────────────

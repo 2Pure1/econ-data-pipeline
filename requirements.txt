@@ -9,8 +9,6 @@ tenacity==8.2.3
 dlt[postgres,bigquery,filesystem]==0.4.2
 requests==2.31.0
 httpx==0.26.0
-pandas-datareader==0.10.0
-
 # ── Data Processing ──────────────────────────────────────────
 pandas==2.1.4
 numpy==1.26.2
