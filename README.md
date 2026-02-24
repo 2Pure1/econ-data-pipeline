@@ -1,6 +1,6 @@
 # 🏗️ Econ Data Pipeline
 
-> **Production-grade macroeconomic data pipeline** ingesting data from the Bureau of Economic Analysis (BEA), FRED, BLS, World Bank, and Yahoo Finance — transforming it through a multi-layer lakehouse and orchestrating workflows with Apache Airflow, Mage, and Kestra.
+> **Production-grade macroeconomic data pipeline** ingesting data from the Bureau of Economic Analysis (BEA), FRED, and BLS — transforming it through a multi-layer lakehouse and orchestrating workflows with Apache Airflow, Mage, and Kestra.
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
 ![dlt](https://img.shields.io/badge/dlt-0.4-orange)
@@ -24,13 +24,13 @@
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                               DATA SOURCES                                   │
-│  ┌──────────────────┐  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌───────┐ │
-│  │   BEA (primary)  │  │   FRED   │  │   BLS    │  │ World Bank│  │yfinance│ │
-│  │ GDP · PCE · ITA  │  │CPI · M2  │  │PPI·Wages │  │Cross-ctry │  │Markets│ │
-│  │ Income · Profits │  │Fed Funds │  │Employment│  │Debt/GDP   │  │VIX·FX │ │
-│  └────────┬─────────┘  └────┬─────┘  └────┬─────┘  └─────┬─────┘  └───┬───┘ │
-└───────────┼────────────────┼──────────────┼───────────────┼────────────┼─────┘
-            └────────────────┴──────────────┴───────────────┴────────────┘
+│  ┌──────────────────┐  ┌──────────┐  ┌──────────┐                           │
+│  │   BEA (primary)  │  │   FRED   │  │   BLS    │                           │
+│  │ GDP · PCE · ITA  │  │CPI · M2  │  │PPI·Wages │                           │
+│  │ Income · Profits │  │Fed Funds │  │Employment│                           │
+│  └────────┬─────────┘  └────┬─────┘  └────┬─────┘                           │
+└───────────┼────────────────┼──────────────┼─────────────────────────────────┘
+            └────────────────┴──────────────┘
                                             │
                                 ┌───────────▼───────────┐
                                 │    dlt  (ingestion)   │
@@ -111,9 +111,7 @@ econ-data-pipeline/
 │   ├── base_pipeline.py           # Base class: S3 archival, retry, dlt wiring
 │   ├── bea_pipeline.py            # BEA NIPA: GDP, PCE, income, trade (PRIMARY)
 │   ├── fred_pipeline.py           # FRED: CPI, Fed Funds, M2, unemployment, yields
-│   ├── bls_pipeline.py            # BLS: payrolls, unemployment, ECI, CPI, productivity
-│   ├── worldbank_pipeline.py      # World Bank: cross-country macro indicators
-│   └── yfinance_pipeline.py       # Yahoo Finance: equities, VIX, FX, commodities
+│   └── bls_pipeline.py            # BLS: payrolls, unemployment, ECI, CPI, productivity
 │
 ├── delta_lake/
 │   ├── delta_writer.py            # PySpark + Delta Lake: MERGE upserts, time travel
@@ -136,7 +134,7 @@ econ-data-pipeline/
 │           └── fct_macro_indicators_monthly.sql
 │
 ├── airflow/dags/
-│   ├── dag_daily_macro_pipeline.py     # Mon–Fri: yfinance markets + dbt
+│   ├── dag_daily_macro_pipeline.py     # Mon-Fri: daily updates + dbt
 │   ├── dag_weekly_fred_pipeline.py     # Every Monday: FRED indicators + dbt
 │   └── dag_monthly_bea_pipeline.py     # 3rd of month: BEA NIPA + Delta merge + dbt full-refresh
 │
@@ -173,7 +171,7 @@ econ-data-pipeline/
 |-------|------|---------|
 | Ingestion | **dlt 0.4** | Schema-inferred pipeline loading with incremental state |
 | Primary Source | **BEA API** | GDP, PCE sub-categories, national income, trade |
-| Secondary Sources | **FRED · BLS · World Bank · yfinance** | Monetary, labor, cross-country, market data |
+| Secondary Sources | **FRED · BLS** | Monetary, labor |
 | Raw Storage | **AWS S3** | Partitioned raw data lake |
 | Lakehouse | **Delta Lake 3.0** | ACID transactions, MERGE upserts, time travel on S3 |
 | Notebook Compute | **Databricks** | Delta table consumption, Spark SQL, ML feature export |
@@ -230,8 +228,6 @@ pip install -r requirements.txt
 python ingestion/bea_pipeline.py --destination postgres   # BEA first (primary source)
 python ingestion/fred_pipeline.py --destination postgres
 python ingestion/bls_pipeline.py --destination postgres
-python ingestion/worldbank_pipeline.py --destination postgres
-python ingestion/yfinance_pipeline.py --destination postgres
 
 # Explore available BEA tables
 python ingestion/bea_pipeline.py --list-tables
@@ -309,8 +305,6 @@ http://localhost:8080  →  admin / admin
 | **BEA** | ✅ Yes | Free | [apps.bea.gov/api/signup](https://apps.bea.gov/api/signup/) |
 | **FRED** | ✅ Yes | Free | [fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html) |
 | **BLS** | ⚠️ Recommended | Free | [bls.gov/developers](https://www.bls.gov/developers/api_signature_v2.htm) |
-| **World Bank** | ❌ None | Free | Public REST API |
-| **Yahoo Finance** | ❌ None | Free | `yfinance` library |
 
 > BLS works without a key but is rate-limited to 25 requests/day and 10 years of history. A registered key raises that to 500/day and 20 years.
 
@@ -353,14 +347,7 @@ http://localhost:8080  →  admin / admin
 | CUSR0000SA0L1E | Core CPI ex Food & Energy | Monthly |
 | PRS85006092 | Nonfarm Business Productivity | Quarterly |
 
-### Yahoo Finance
 
-| Instruments | Frequency |
-|------------|-----------|
-| S&P 500, NASDAQ, Dow Jones, Russell 2000 | Daily |
-| VIX, USD Index, EUR/USD, GBP/USD, USD/JPY | Daily |
-| WTI Crude Oil, Gold, Silver | Daily |
-| Treasury ETFs (IEF, TLT, SHY), Credit ETFs (LQD, HYG) | Daily |
 
 ---
 

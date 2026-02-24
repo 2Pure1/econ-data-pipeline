@@ -1,6 +1,6 @@
 -- models/marts/forecasting/fct_macro_indicators_monthly.sql
 -- Wide monthly macro table for ML feature engineering.
--- Pivots FRED series into columns; joins market data.
+-- Pivots FRED series into columns.
 -- Used by econ-forecast-engine as primary feature source.
 
 {{
@@ -99,20 +99,6 @@ trade_balance as (
     from fred where series_id = 'BOPGSTB'
 ),
 
--- Monthly average of daily market data
-market_monthly as (
-    select
-        trade_month                                                     as period,
-        avg(case when ticker = '^GSPC' then close_price end)           as sp500_close_avg,
-        avg(case when ticker = '^VIX'  then close_price end)           as vix_avg,
-        avg(case when ticker = 'DX-Y.NYB' then close_price end)        as usd_index_avg,
-        avg(case when ticker = 'CL=F' then close_price end)            as wti_oil_avg,
-        avg(case when ticker = 'GC=F' then close_price end)            as gold_avg,
-        avg(case when ticker = '^GSPC' then daily_return end)          as sp500_monthly_return_avg,
-        avg(case when ticker = '^GSPC' then rolling_vol_20d end)       as sp500_realised_vol_avg
-    from {{ ref('stg_market_prices') }}
-    group by 1
-),
 
 -- Spine: all months since 1990
 spine as (
@@ -176,14 +162,7 @@ joined as (
         hs.housing_starts_thousands,
         tb.trade_balance_millions,
 
-        -- Markets
-        mm.sp500_close_avg,
-        mm.vix_avg,
-        mm.usd_index_avg,
-        mm.wti_oil_avg,
-        mm.gold_avg,
-        mm.sp500_monthly_return_avg,
-        mm.sp500_realised_vol_avg,
+
 
         -- Data completeness flag
         case
@@ -213,7 +192,6 @@ joined as (
     left join industrial_production ip on s.observation_month = ip.period
     left join housing_starts hs     on s.observation_month = hs.period
     left join trade_balance tb      on s.observation_month = tb.period
-    left join market_monthly mm     on s.observation_month = mm.period
 )
 
 select * from joined

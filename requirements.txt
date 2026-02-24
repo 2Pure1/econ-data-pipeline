@@ -9,9 +9,7 @@ tenacity==8.2.3
 dlt[postgres,bigquery,filesystem]==0.4.2
 requests==2.31.0
 httpx==0.26.0
-yfinance==0.2.36
 pandas-datareader==0.10.0
-world-bank-data==0.1.3
 
 # ── Data Processing ──────────────────────────────────────────
 pandas==2.1.4

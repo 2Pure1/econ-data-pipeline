@@ -47,30 +47,7 @@ CREATE TABLE IF NOT EXISTS raw.bea_nipa_observations (
 CREATE INDEX IF NOT EXISTS idx_bea_obs_key_series_period ON raw.bea_nipa_observations (table_key, series_name, period_date);
 CREATE INDEX IF NOT EXISTS idx_bea_obs_ingested_at ON raw.bea_nipa_observations (ingested_at DESC);
 
-CREATE TABLE IF NOT EXISTS raw.market_prices (
-    ticker              TEXT             NOT NULL,
-    trade_date          DATE             NOT NULL,
-    open                DOUBLE PRECISION,
-    high                DOUBLE PRECISION,
-    low                 DOUBLE PRECISION,
-    close               DOUBLE PRECISION,
-    volume              DOUBLE PRECISION,
-    daily_return        DOUBLE PRECISION,
-    log_return          DOUBLE PRECISION,
-    rolling_vol_20d     DOUBLE PRECISION,
-    ma_50               DOUBLE PRECISION,
-    ma_200              DOUBLE PRECISION,
-    above_200ma         BOOLEAN,
-    ticker_name         TEXT,
-    category            TEXT,
-    asset_class         TEXT,
-    source              TEXT             DEFAULT 'yfinance',
-    ingested_at         TIMESTAMPTZ      NOT NULL DEFAULT now(),
-    _dlt_load_id        TEXT,
-    _dlt_id             TEXT             PRIMARY KEY
-);
-CREATE INDEX IF NOT EXISTS idx_market_ticker_date ON raw.market_prices (ticker, trade_date);
-CREATE INDEX IF NOT EXISTS idx_market_ingested_at ON raw.market_prices (ingested_at DESC);
+
 
 CREATE TABLE IF NOT EXISTS raw.bls_observations (
     series_id           TEXT             NOT NULL,

@@ -65,28 +65,4 @@ sources:
           - name: ingested_at
             description: "UTC timestamp when dlt loaded this record"
 
-      - name: market_prices
-        description: >
-          Daily OHLCV market data loaded by yfinance_pipeline.py.
-          Covers S&P 500, NASDAQ, VIX, USD index, WTI oil, gold, Treasury ETFs,
-          credit ETFs, FX pairs, and Bitcoin. Includes derived features
-          (daily returns, 20d realised vol, 50/200 day moving averages).
-        columns:
-          - name: ticker
-            description: "Yahoo Finance ticker symbol (e.g. ^GSPC, CL=F)"
-            tests:
-              - not_null
-          - name: trade_date
-            description: "Trading date (YYYY-MM-DD)"
-            tests:
-              - not_null
-          - name: close
-            description: "Adjusted closing price"
-          - name: volume
-            description: "Trading volume"
-          - name: daily_return
-            description: "Daily percent return: (close - prev_close) / prev_close"
-          - name: rolling_vol_20d
-            description: "20-day annualised realised volatility"
-          - name: ingested_at
-            description: "UTC timestamp when dlt loaded this record"
+

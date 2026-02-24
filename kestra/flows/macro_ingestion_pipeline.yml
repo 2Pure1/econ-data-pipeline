@@ -22,7 +22,7 @@ namespace: econ.pipelines
 
 description: |
   Monthly macroeconomic data ingestion pipeline.
-  Runs BEA + FRED + BLS + World Bank ingestion in parallel,
+  Runs BEA + FRED + BLS ingestion in parallel,
   then refreshes dbt models and runs data quality tests.
 
 labels:
@@ -100,18 +100,7 @@ tasks:
           if result.returncode != 0:
               raise Exception(f"FRED ingestion failed:\n{result.stderr}")
 
-      - id: ingest_yfinance
-        type: io.kestra.core.tasks.scripts.Python
-        description: "Yahoo Finance — market prices, VIX, FX, commodities"
-        script: |
-          import subprocess, sys
-          result = subprocess.run([
-              sys.executable, "ingestion/yfinance_pipeline.py",
-              "--destination", "{{ inputs.destination }}",
-          ], capture_output=True, text=True)
-          print(result.stdout)
-          if result.returncode != 0:
-              raise Exception(f"yfinance ingestion failed:\n{result.stderr}")
+
 
   # ── Delta Lake write ──────────────────────────────────────────────────────────
   - id: write_delta_lake
@@ -160,7 +149,7 @@ tasks:
     url: "{{ secret('SLACK_WEBHOOK_URL') }}"
     payload: |
       {
-        "text": ":large_green_circle: *Monthly Pipeline Complete (Kestra)*\nBEA + FRED + yfinance ingested, Delta Lake updated, dbt refreshed.\nRun date: {{ execution.startDate }}"
+        "text": ":large_green_circle: *Monthly Pipeline Complete (Kestra)*\nBEA + FRED ingested, Delta Lake updated, dbt refreshed.\nRun date: {{ execution.startDate }}"
       }
 
 errors:
