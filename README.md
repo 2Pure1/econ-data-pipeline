@@ -111,7 +111,7 @@ econ-data-pipeline/
 │   ├── base_pipeline.py           # Base class: S3 archival, retry, dlt wiring
 │   ├── bea_pipeline.py            # BEA NIPA: GDP, PCE, income, trade (PRIMARY)
 │   ├── fred_pipeline.py           # FRED: CPI, Fed Funds, M2, unemployment, yields
-│   ├── bls_pipeline.py            # BLS: CPI components, PPI, wages
+│   ├── bls_pipeline.py            # BLS: payrolls, unemployment, ECI, CPI, productivity
 │   ├── worldbank_pipeline.py      # World Bank: cross-country macro indicators
 │   └── yfinance_pipeline.py       # Yahoo Finance: equities, VIX, FX, commodities
 │
@@ -136,8 +136,9 @@ econ-data-pipeline/
 │           └── fct_macro_indicators_monthly.sql
 │
 ├── airflow/dags/
-│   ├── dag_daily_macro_pipeline.py     # Mon–Fri: markets + dbt
-│   └── dag_monthly_fred_pipeline.py    # BEA + FRED + BLS + World Bank
+│   ├── dag_daily_macro_pipeline.py     # Mon–Fri: yfinance markets + dbt
+│   ├── dag_weekly_fred_pipeline.py     # Every Monday: FRED indicators + dbt
+│   └── dag_monthly_bea_pipeline.py     # 3rd of month: BEA NIPA + Delta merge + dbt full-refresh
 │
 ├── mage/pipelines/
 │   └── macro_ingestion_pipeline.py    # Mage block-based pipeline (alternative)
@@ -147,18 +148,18 @@ econ-data-pipeline/
 │
 ├── terraform/
 │   ├── main.tf                    # AWS S3 + GCP BigQuery + IAM
-│   ├── variables.tf
-│   └── outputs.tf
+│   ├── variables.tf               # Variable declarations (aws_region, gcp_project_id, etc.)
+│   └── outputs.tf                 # Bucket names, service account email, IAM ARN
 │
 ├── docker/
 │   ├── docker-compose.yml         # PostgreSQL + Airflow + pgAdmin
-│   └── Dockerfile.pipeline
+│   ├── Dockerfile.pipeline
+│   └── scripts/
+│       └── init_db.sql            # PostgreSQL schema init (raw/staging/marts + stub tables)
 │
 ├── tests/
 │   ├── test_bea_pipeline.py
 │   └── test_fred_pipeline.py
-│
-├── scripts/init_db.sql
 ├── .github/workflows/ci.yml
 ├── .env.example
 └── requirements.txt
@@ -338,6 +339,19 @@ http://localhost:8080  →  admin / admin
 | M2 Money Supply | Monthly |
 | Unemployment (U-3 + U-6), Nonfarm Payrolls, Labor Force Participation | Monthly |
 | Consumer Sentiment (UMich), Industrial Production, Housing Starts | Monthly |
+
+### BLS — Bureau of Labor Statistics
+
+| Series | Description | Frequency |
+|--------|------------|-----------|
+| CES0000000001 | Total Nonfarm Payrolls | Monthly |
+| LNS14000000 | Unemployment Rate (U-3) | Monthly |
+| LNS13327709 | U-6 Underemployment Rate | Monthly |
+| CES0500000003 | Average Hourly Earnings, Private | Monthly |
+| CIU1010000000000A | Employment Cost Index | Quarterly |
+| CUSR0000SA0 | CPI-U All Items (seasonally adjusted) | Monthly |
+| CUSR0000SA0L1E | Core CPI ex Food & Energy | Monthly |
+| PRS85006092 | Nonfarm Business Productivity | Quarterly |
 
 ### Yahoo Finance
 

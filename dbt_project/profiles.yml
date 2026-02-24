@@ -1,0 +1,43 @@
+econ_warehouse:
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
+  outputs:
+
+    # ── DuckDB (fastest local dev — no server needed) ──────────────────────
+    # Run: dbt run --target duckdb
+    # DuckDB reads Parquet files directly from the Delta Lake layer.
+    # 10-100x faster than Postgres for analytical column scans.
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '/tmp/econ_analytics.duckdb') }}"
+      schema: main
+      threads: 4
+
+    # ── PostgreSQL (Docker dev + CI) ───────────────────────────────────────
+    dev:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'localhost') }}"
+      port: "{{ env_var('POSTGRES_PORT', '5432') | int }}"
+      user: "{{ env_var('POSTGRES_USER', 'econ_user') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'econ_warehouse') }}"
+      schema: marts
+      threads: 4
+
+    prod_postgres:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST') }}"
+      port: "{{ env_var('POSTGRES_PORT') | int }}"
+      user: "{{ env_var('POSTGRES_USER') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      dbname: "{{ env_var('POSTGRES_DB') }}"
+      schema: marts
+      threads: 8
+
+    prod_bigquery:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: "{{ env_var('BIGQUERY_DATASET', 'econ_warehouse') }}"
+      threads: 8
+      location: "{{ env_var('BIGQUERY_LOCATION', 'US') }}"
+      timeout_seconds: 300

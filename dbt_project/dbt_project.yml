@@ -1,0 +1,54 @@
+name: 'econ_data_pipeline'
+version: '1.0.0'
+config-version: 2
+
+# Profile references the connection defined in profiles.yml
+profile: 'econ_warehouse'
+
+# File paths
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# ── Variables ────────────────────────────────────────────────────────────────
+vars:
+  # Date range for historical loads
+  start_year: 1990
+  end_year: 2024
+
+# ── Model Defaults ────────────────────────────────────────────────────────────
+models:
+  econ_data_pipeline:
+
+    # Staging layer: lightweight views, one-to-one with raw tables
+    staging:
+      +materialized: view
+      +schema: staging
+      +tags: ["staging"]
+
+    # Marts layer: physical tables, business-ready
+    marts:
+      +materialized: table
+      +schema: marts
+      +tags: ["marts"]
+
+      forecasting:
+        +materialized: table
+        +schema: marts
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+# dbt test --select staging  →  run all staging model tests
+# dbt test --select marts    →  run all mart model tests
+
+# ── Seeds ─────────────────────────────────────────────────────────────────────
+seeds:
+  econ_data_pipeline:
+    +schema: seeds

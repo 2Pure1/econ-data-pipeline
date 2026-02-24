@@ -1,0 +1,173 @@
+id: macro_ingestion_pipeline
+namespace: econ.pipelines
+
+# ============================================================
+# Kestra Flow — Econ Data Pipeline
+# ============================================================
+# Kestra vs Airflow vs Mage — quick comparison:
+#
+#   Airflow:  Python DAGs, mature ecosystem, verbose setup,
+#             strong for complex dependency graphs
+#
+#   Mage:     Notebook-style blocks, great DX, built-in previews,
+#             best for small teams iterating fast
+#
+#   Kestra:   YAML-first, language-agnostic, strong UI, event-driven,
+#             best when pipelines involve multiple languages/tools
+#             or need webhook/API triggers
+#
+# This flow mirrors the monthly_fred_pipeline Airflow DAG
+# but written in Kestra's declarative YAML syntax.
+# ============================================================
+
+description: |
+  Monthly macroeconomic data ingestion pipeline.
+  Runs BEA + FRED + BLS + World Bank ingestion in parallel,
+  then refreshes dbt models and runs data quality tests.
+
+labels:
+  project: econ-data-pipeline
+  layer: ingestion
+  schedule: monthly
+
+triggers:
+  - id: monthly_schedule
+    type: io.kestra.core.models.triggers.types.Schedule
+    cron: "0 8 2 * *"     # 2nd of every month at 8am UTC
+
+  - id: manual_trigger
+    type: io.kestra.core.models.triggers.types.Webhook
+    key: "{{ secret('KESTRA_WEBHOOK_KEY') }}"
+
+inputs:
+  - name: start_year
+    type: INT
+    defaults: 1990
+    description: "Start year for historical data pull"
+
+  - name: destination
+    type: STRING
+    defaults: postgres
+    description: "Target destination: postgres or bigquery"
+
+variables:
+  pipeline_dir: /app
+  dbt_dir: /app/dbt_project
+
+tasks:
+
+  # ── Parallel ingestion from all sources ──────────────────────────────────────
+  - id: parallel_ingestion
+    type: io.kestra.core.tasks.flows.Parallel
+    tasks:
+
+      - id: ingest_bea
+        type: io.kestra.core.tasks.scripts.Python
+        description: "BEA NIPA — GDP, PCE, income, trade (primary source)"
+        inputFiles:
+          ingestion/bea_pipeline.py: "{{ read('ingestion/bea_pipeline.py') }}"
+          ingestion/base_pipeline.py: "{{ read('ingestion/base_pipeline.py') }}"
+        env:
+          BEA_API_KEY: "{{ secret('BEA_API_KEY') }}"
+          POSTGRES_HOST: "{{ secret('POSTGRES_HOST') }}"
+          POSTGRES_PASSWORD: "{{ secret('POSTGRES_PASSWORD') }}"
+        script: |
+          import subprocess, sys
+          result = subprocess.run([
+              sys.executable, "ingestion/bea_pipeline.py",
+              "--destination", "{{ inputs.destination }}",
+              "--start", "{{ inputs.start_year }}",
+          ], capture_output=True, text=True)
+          print(result.stdout)
+          if result.returncode != 0:
+              raise Exception(f"BEA ingestion failed:\n{result.stderr}")
+
+      - id: ingest_fred
+        type: io.kestra.core.tasks.scripts.Python
+        description: "FRED — CPI, Fed Funds Rate, M2, unemployment, yields"
+        env:
+          FRED_API_KEY: "{{ secret('FRED_API_KEY') }}"
+          POSTGRES_HOST: "{{ secret('POSTGRES_HOST') }}"
+          POSTGRES_PASSWORD: "{{ secret('POSTGRES_PASSWORD') }}"
+        script: |
+          import subprocess, sys
+          result = subprocess.run([
+              sys.executable, "ingestion/fred_pipeline.py",
+              "--destination", "{{ inputs.destination }}",
+              "--start", "{{ inputs.start_year }}-01-01",
+          ], capture_output=True, text=True)
+          print(result.stdout)
+          if result.returncode != 0:
+              raise Exception(f"FRED ingestion failed:\n{result.stderr}")
+
+      - id: ingest_yfinance
+        type: io.kestra.core.tasks.scripts.Python
+        description: "Yahoo Finance — market prices, VIX, FX, commodities"
+        script: |
+          import subprocess, sys
+          result = subprocess.run([
+              sys.executable, "ingestion/yfinance_pipeline.py",
+              "--destination", "{{ inputs.destination }}",
+          ], capture_output=True, text=True)
+          print(result.stdout)
+          if result.returncode != 0:
+              raise Exception(f"yfinance ingestion failed:\n{result.stderr}")
+
+  # ── Delta Lake write ──────────────────────────────────────────────────────────
+  - id: write_delta_lake
+    type: io.kestra.core.tasks.scripts.Python
+    description: "Write/upsert all tables to Delta Lake on S3"
+    env:
+      DELTA_S3_PATH: "{{ secret('DELTA_S3_PATH') }}"
+      AWS_ACCESS_KEY_ID: "{{ secret('AWS_ACCESS_KEY_ID') }}"
+      AWS_SECRET_ACCESS_KEY: "{{ secret('AWS_SECRET_ACCESS_KEY') }}"
+    script: |
+      import subprocess, sys
+      result = subprocess.run([
+          sys.executable, "delta_lake/delta_writer.py",
+          "--table", "all",
+          "--mode", "merge",
+      ], capture_output=True, text=True)
+      print(result.stdout)
+      if result.returncode != 0:
+          raise Exception(f"Delta Lake write failed:\n{result.stderr}")
+
+  # ── dbt full refresh ──────────────────────────────────────────────────────────
+  - id: dbt_run
+    type: io.kestra.core.tasks.scripts.Commands
+    description: "Run dbt full refresh after ingestion"
+    commands:
+      - cd {{ vars.dbt_dir }}
+      - dbt run --full-refresh --profiles-dir . --target dev
+    env:
+      POSTGRES_HOST: "{{ secret('POSTGRES_HOST') }}"
+      POSTGRES_PASSWORD: "{{ secret('POSTGRES_PASSWORD') }}"
+
+  # ── dbt tests ─────────────────────────────────────────────────────────────────
+  - id: dbt_test
+    type: io.kestra.core.tasks.scripts.Commands
+    description: "Run dbt data quality tests"
+    commands:
+      - cd {{ vars.dbt_dir }}
+      - dbt test --profiles-dir . --target dev
+    env:
+      POSTGRES_HOST: "{{ secret('POSTGRES_HOST') }}"
+      POSTGRES_PASSWORD: "{{ secret('POSTGRES_PASSWORD') }}"
+
+  # ── Slack notification ────────────────────────────────────────────────────────
+  - id: notify_success
+    type: io.kestra.plugin.notifications.slack.SlackIncomingWebhook
+    url: "{{ secret('SLACK_WEBHOOK_URL') }}"
+    payload: |
+      {
+        "text": ":large_green_circle: *Monthly Pipeline Complete (Kestra)*\nBEA + FRED + yfinance ingested, Delta Lake updated, dbt refreshed.\nRun date: {{ execution.startDate }}"
+      }
+
+errors:
+  - id: notify_failure
+    type: io.kestra.plugin.notifications.slack.SlackIncomingWebhook
+    url: "{{ secret('SLACK_WEBHOOK_URL') }}"
+    payload: |
+      {
+        "text": ":red_circle: *Pipeline Failure (Kestra)*\nTask: {{ task.id }}\nError: {{ errorLogs() }}\nExecution: {{ execution.id }}"
+      }

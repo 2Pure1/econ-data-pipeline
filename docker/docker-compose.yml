@@ -1,0 +1,149 @@
+version: '3.8'
+
+# ============================================================
+# Econ Data Pipeline — Local Development Stack
+# Services: PostgreSQL, Apache Airflow, pgAdmin
+#
+# Usage:
+#   docker compose up -d
+#   docker compose down -v   (to destroy volumes)
+# ============================================================
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.8.0-python3.11
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://econ_user:${POSTGRES_PASSWORD:-localdev}@postgres:5432/airflow_db
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY:-dev-secret-key}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+    # Pipeline-specific env vars
+    PIPELINE_DIR: /app
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: 5432
+    POSTGRES_DB: ${POSTGRES_DB:-econ_warehouse}
+    POSTGRES_USER: ${POSTGRES_USER:-econ_user}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+    FRED_API_KEY: ${FRED_API_KEY:-}
+    BLS_API_KEY: ${BLS_API_KEY:-}
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    S3_BUCKET_RAW: ${S3_BUCKET_RAW:-econ-pipeline-raw-data}
+    GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gcp-credentials.json
+    GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+    DBT_PROFILES_DIR: /app/dbt_project
+    DBT_TARGET: dev
+  volumes:
+    - .:/app
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/plugins:/opt/airflow/plugins
+    - airflow-logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks:
+    - econ-net
+
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-econ_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+      POSTGRES_DB: ${POSTGRES_DB:-econ_warehouse}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-econ_user} -d ${POSTGRES_DB:-econ_warehouse}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - econ-net
+
+  # ── pgAdmin ───────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@econ.local
+      PGADMIN_DEFAULT_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - econ-net
+
+  # ── Airflow Init ──────────────────────────────────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create
+          --username admin
+          --firstname Admin
+          --lastname User
+          --role Admin
+          --email admin@econ.local
+          --password ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      "
+    restart: on-failure
+
+  # ── Airflow Webserver ─────────────────────────────────────────────────────
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ── Airflow Scheduler ─────────────────────────────────────────────────────
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ── Pipeline App Container ────────────────────────────────────────────────
+  pipeline:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.pipeline
+    environment:
+      <<: *airflow-env
+    volumes:
+      - .:/app
+    command: tail -f /dev/null # Keep alive for manual execution
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - econ-net
+
+volumes:
+  postgres-data:
+  airflow-logs:
+
+
+networks:
+  econ-net:
+    driver: bridge

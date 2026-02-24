@@ -1,0 +1,92 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: >
+      Raw data loaded directly by dlt ingestion pipelines.
+      All tables are in append/merge mode — deduplication happens in staging.
+
+    # Source freshness checks (run with: dbt source freshness)
+    loaded_at_field: ingested_at
+    freshness:
+      warn_after: {count: 1, period: day}
+      error_after: {count: 3, period: day}
+
+    tables:
+
+      - name: fred_observations
+        description: >
+          FRED macroeconomic series observations loaded by fred_pipeline.py.
+          Contains GDP, CPI, PCE, unemployment, Fed Funds rate, Treasury yields,
+          M2 money supply, consumer sentiment, industrial production, and housing data.
+        columns:
+          - name: series_id
+            description: "FRED series identifier (e.g. CPIAUCSL, FEDFUNDS)"
+            tests:
+              - not_null
+          - name: observation_date
+            description: "Date of the observation (YYYY-MM-DD string)"
+            tests:
+              - not_null
+          - name: value
+            description: "Numeric value; null when FRED reports missing ('.')"
+          - name: value_is_missing
+            description: "True when the original FRED value was '.'"
+          - name: series_url
+            description: "FRED series URL for documentation"
+          - name: ingested_at
+            description: "UTC timestamp when dlt loaded this record"
+
+      - name: bea_nipa_observations
+        description: >
+          BEA National Income and Product Accounts data loaded by bea_pipeline.py.
+          Primary source for GDP, PCE sub-categories, personal income, saving rate,
+          corporate profits, and international trade flows.
+        columns:
+          - name: table_key
+            description: "Internal table identifier (e.g. gdp_and_components)"
+            tests:
+              - not_null
+          - name: series_name
+            description: "Series name within the table (e.g. gdp, pce_total)"
+            tests:
+              - not_null
+          - name: period_date
+            description: "ISO date for the start of the observation period"
+            tests:
+              - not_null
+          - name: value
+            description: "Numeric value; null when BEA reports suppressed data"
+          - name: bea_table_name
+            description: "BEA internal table code (e.g. T10105)"
+          - name: frequency
+            description: "Data frequency: A (annual), Q (quarterly), M (monthly)"
+          - name: ingested_at
+            description: "UTC timestamp when dlt loaded this record"
+
+      - name: market_prices
+        description: >
+          Daily OHLCV market data loaded by yfinance_pipeline.py.
+          Covers S&P 500, NASDAQ, VIX, USD index, WTI oil, gold, Treasury ETFs,
+          credit ETFs, FX pairs, and Bitcoin. Includes derived features
+          (daily returns, 20d realised vol, 50/200 day moving averages).
+        columns:
+          - name: ticker
+            description: "Yahoo Finance ticker symbol (e.g. ^GSPC, CL=F)"
+            tests:
+              - not_null
+          - name: trade_date
+            description: "Trading date (YYYY-MM-DD)"
+            tests:
+              - not_null
+          - name: close
+            description: "Adjusted closing price"
+          - name: volume
+            description: "Trading volume"
+          - name: daily_return
+            description: "Daily percent return: (close - prev_close) / prev_close"
+          - name: rolling_vol_20d
+            description: "20-day annualised realised volatility"
+          - name: ingested_at
+            description: "UTC timestamp when dlt loaded this record"

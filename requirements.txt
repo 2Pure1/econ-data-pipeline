@@ -1,44 +1,65 @@
-# ==============================================================================
-# 🏗️ Econ Data Pipeline - Python Dependencies
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# 🚀 Core & Ingestion
-# ------------------------------------------------------------------------------
-dlt==0.4.1
-requests==2.31.0
+# ── Core ────────────────────────────────────────────────────
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
 loguru==0.7.2
-pandas==2.2.0
-polars==0.20.7
+tenacity==8.2.3
+
+# ── Data Ingestion ───────────────────────────────────────────
+dlt[postgres,bigquery,filesystem]==0.4.2
+requests==2.31.0
+httpx==0.26.0
 yfinance==0.2.36
+pandas-datareader==0.10.0
+world-bank-data==0.1.3
 
-# ------------------------------------------------------------------------------
-# 🦅 Lakehouse & Spark
-# ------------------------------------------------------------------------------
-pyspark==3.5.0
-delta-spark==3.0.0
+# ── Data Processing ──────────────────────────────────────────
+pandas==2.1.4
+numpy==1.26.2
+pyarrow==14.0.2
+polars==0.20.3                  # Rust-based DataFrame lib, faster than Pandas for large frames
 
-# ------------------------------------------------------------------------------
-# 🦆 Local Analytics & DuckDB
-# ------------------------------------------------------------------------------
-duckdb==0.10.0
+# ── Delta Lake ───────────────────────────────────────────────
+delta-spark==3.0.0              # Delta Lake on local PySpark (Databricks-compatible protocol)
+pyspark==3.5.0                  # Required for delta-spark local dev
+# delta-rs==0.15.2                # Rust-native Delta reader (no JVM needed for read-only)
 
-# ------------------------------------------------------------------------------
-# 🏛️ Data Transformation (dbt)
-# ------------------------------------------------------------------------------
-dbt-core==1.7.9
-dbt-duckdb==1.7.1
-dbt-postgres==1.7.9
-dbt-bigquery==1.7.6
+# ── DuckDB ───────────────────────────────────────────────────
+duckdb==0.10.0                  # In-process OLAP -- dbt dev target, ad-hoc analytics
+dbt-duckdb==1.7.1               # dbt adapter for DuckDB
 
-# ------------------------------------------------------------------------------
-# ⚙️ Orchestration
-# ------------------------------------------------------------------------------
-apache-airflow==2.8.2
-mage-ai==0.9.64
-
-# ------------------------------------------------------------------------------
-# 🐘 Database Drivers
-# ------------------------------------------------------------------------------
+# ── Database ─────────────────────────────────────────────────
 psycopg2-binary==2.9.9
 sqlalchemy==2.0.25
+alembic==1.13.1
+
+# ── Cloud Storage ────────────────────────────────────────────
+boto3==1.34.14                  # AWS S3
+google-cloud-bigquery==3.14.1
+google-cloud-storage==2.14.0
+google-auth==2.26.1
+
+# ── dbt ─────────────────────────────────────────────────────
+dbt-core==1.7.3
+dbt-postgres==1.7.3
+dbt-bigquery==1.7.3
+
+# ── Airflow (install separately via pip or docker) ───────────
+# apache-airflow==2.8.0
+# apache-airflow-providers-postgres==5.8.0
+# apache-airflow-providers-amazon==8.13.0
+# apache-airflow-providers-google==10.13.1
+# apache-airflow-providers-slack==8.4.0
+
+# ── Testing ─────────────────────────────────────────────────
+pytest==7.4.4
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+great-expectations==0.18.8
+
+# ── Development ──────────────────────────────────────────────
+jupyter==1.0.0
+ipykernel==6.29.0
+black==23.12.1
+ruff==0.1.11
+pre-commit==3.6.0
