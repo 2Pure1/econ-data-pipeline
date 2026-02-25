@@ -130,14 +130,14 @@ joined as (
 
         -- Computed: YoY inflation rates
         round(
-            100.0 * (c.cpi_all_urban - lag(c.cpi_all_urban, 12) over (order by s.observation_month))
-            / nullif(lag(c.cpi_all_urban, 12) over (order by s.observation_month), 0),
+            (100.0 * (c.cpi_all_urban - lag(c.cpi_all_urban, 12) over (order by s.observation_month))
+            / nullif(lag(c.cpi_all_urban, 12) over (order by s.observation_month), 0))::numeric,
             2
         )                                                   as cpi_yoy_pct,
 
         round(
-            100.0 * (cp.core_pce - lag(cp.core_pce, 12) over (order by s.observation_month))
-            / nullif(lag(cp.core_pce, 12) over (order by s.observation_month), 0),
+            (100.0 * (cp.core_pce - lag(cp.core_pce, 12) over (order by s.observation_month))
+            / nullif(lag(cp.core_pce, 12) over (order by s.observation_month), 0))::numeric,
             2
         )                                                   as core_pce_yoy_pct,
 

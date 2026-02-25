@@ -91,9 +91,9 @@ NIPA_TABLES = {
         },
     },
 
-    # ── PCE by Major Category (Table 2.3.5) ──────────────────────────────────
+    # ── PCE by Major Category (Table 2.8.5) ──────────────────────────────────
     "pce_by_category": {
-        "table_name": "T20305",         # PCE by major type, levels
+        "table_name": "T20805",         # PCE by major type, levels
         "description": "Personal Consumption Expenditures by category ($B SAAR)",
         "frequency": "M",              # Monthly — more granular than FRED
         "lines": {
@@ -113,8 +113,8 @@ NIPA_TABLES = {
 
     # ── Personal Income & Saving (Table 2.1) ─────────────────────────────────
     "personal_income_saving": {
-        "table_name": "T20100",         # Personal income, outlays, saving
-        "description": "Personal income, disposable income, saving rate (monthly)",
+        "table_name": "T20600",         # Personal income, outlays, saving
+        "description": "Personal income, disposable income, and saving",
         "frequency": "M",
         "lines": {
             1:  "personal_income",
@@ -133,8 +133,8 @@ NIPA_TABLES = {
 
     # ── Corporate Profits (Table 6.16) ───────────────────────────────────────
     "corporate_profits": {
-        "table_name": "T61600A",        # Corporate profits by industry
-        "description": "Corporate profits with inventory/capital adj. (quarterly)",
+        "table_name": "T61600D",        # Corporate profits by industry
+        "description": "Corporate profits by industry",
         "frequency": "Q",
         "lines": {
             1: "corporate_profits_total",
@@ -453,7 +453,7 @@ if __name__ == "__main__":
         client = BEAClient()
         tables = client.list_nipa_tables()
         for t in tables:
-            print(f"{t.get('Key', ''):12s}  {t.get('Desc', '')}")
+            print(f"{t.get('TableName', ''):12s}  {t.get('Description', '')}")
         raise SystemExit(0)
 
     pipeline = BEAPipeline(
