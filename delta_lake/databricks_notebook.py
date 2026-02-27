@@ -32,13 +32,29 @@ aws_secret_key = dbutils.widgets.get("2_aws_secret_key")
 if not aws_access_key or not aws_secret_key:
     raise ValueError("Please enter your AWS credentials in the widgets at the top of the notebook!")
 
-# AWS credentials must be configured on Spark context for the `s3a://` protocol
-spark.conf.set("fs.s3a.access.key", aws_access_key)
-spark.conf.set("fs.s3a.secret.key", aws_secret_key)
-spark.conf.set("fs.s3a.endpoint", "s3.amazonaws.com")
+import urllib.parse
 
-# Note: On newer Databricks clusters AWS credential pass-through is handled differently
-# but for a free community account Spark configs should work.
+# URL encode the secret key to handle special characters (like slashes) in AWS secret keys
+encoded_secret_key = urllib.parse.quote(aws_secret_key, safe="")
+
+# The DBFS mount point where the bucket will be attached
+MOUNT_POINT = f"/mnt/{S3_BUCKET}"
+DELTA_BASE_PATH = f"{MOUNT_POINT}/delta_lake"
+
+# Check if the bucket is already mounted. If not, mount it securely.
+if any(mount.mountPoint == MOUNT_POINT for mount in dbutils.fs.mounts()):
+    print(f"Bucket is already mounted at {MOUNT_POINT}")
+else:
+    print(f"Mounting S3 bucket to {MOUNT_POINT}...")
+    dbutils.fs.mount(
+        source=f"s3a://{aws_access_key}:{encoded_secret_key}@{S3_BUCKET}",
+        mount_point=MOUNT_POINT
+    )
+    print("Mount successful!")
+
+# Note on Free Community Edition:
+# Mounting via dbutils.fs.mount bridges the Hadoop/S3 authorization layer securely 
+# into Databricks SQL, bypassing the [CONFIG_NOT_AVAILABLE] strict SQL errors.
 
 # COMMAND ----------
 
