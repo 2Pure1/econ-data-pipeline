@@ -21,10 +21,16 @@ import os
 S3_BUCKET = "econ-pipeline-raw-data-dev"
 DELTA_BASE_PATH = f"s3a://{S3_BUCKET}/delta_lake"
 
-# Set AWS credentials (replace with your actual AWS IAM keys or use Databricks secrets)
-# dbutils.secrets.get(scope="aws", key="aws_access_key_id") is recommended
-aws_access_key = "YOUR_AWS_ACCESS_KEY"
-aws_secret_key = "YOUR_AWS_SECRET_KEY"
+# To keep credentials secure in the free Community Edition (which lacks Secret Scopes),
+# we create Databricks UI widgets. You will enter your keys at the top of the notebook.
+dbutils.widgets.text("1_aws_access_key", "", "AWS Access Key")
+dbutils.widgets.text("2_aws_secret_key", "", "AWS Secret Key")
+
+aws_access_key = dbutils.widgets.get("1_aws_access_key")
+aws_secret_key = dbutils.widgets.get("2_aws_secret_key")
+
+if not aws_access_key or not aws_secret_key:
+    raise ValueError("Please enter your AWS credentials in the widgets at the top of the notebook!")
 
 # AWS credentials must be configured on Spark context for the `s3a://` protocol
 spark.conf.set("fs.s3a.access.key", aws_access_key)
