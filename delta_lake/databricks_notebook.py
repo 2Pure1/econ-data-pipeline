@@ -32,29 +32,23 @@ aws_secret_key = dbutils.widgets.get("2_aws_secret_key")
 if not aws_access_key or not aws_secret_key:
     raise ValueError("Please enter your AWS credentials in the widgets at the top of the notebook!")
 
-import urllib.parse
+# The Databricks Free Community Edition restricts both direct AWS credential pass-throughs
+# in Databricks SQL, as well as the 'dbutils.fs.mounts()' API.
+# The most reliable way to read S3 in the Community Edition without mounting
+# is strictly configuring the open-source Hadoop S3A connector on the Spark Context.
 
-# URL encode the secret key to handle special characters (like slashes) in AWS secret keys
-encoded_secret_key = urllib.parse.quote(aws_secret_key, safe="")
+DELTA_BASE_PATH = f"s3a://{S3_BUCKET}/delta_lake"
 
-# The DBFS mount point where the bucket will be attached
-MOUNT_POINT = f"/mnt/{S3_BUCKET}"
-DELTA_BASE_PATH = f"{MOUNT_POINT}/delta_lake"
+# Set the Hadoop S3A properties for the active Spark Session
+spark.conf.set("fs.s3a.access.key", aws_access_key)
+spark.conf.set("fs.s3a.secret.key", aws_secret_key)
+spark.conf.set("fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
+spark.conf.set("fs.s3a.endpoint", "s3.amazonaws.com")
 
-# Check if the bucket is already mounted. If not, mount it securely.
-if any(mount.mountPoint == MOUNT_POINT for mount in dbutils.fs.mounts()):
-    print(f"Bucket is already mounted at {MOUNT_POINT}")
-else:
-    print(f"Mounting S3 bucket to {MOUNT_POINT}...")
-    dbutils.fs.mount(
-        source=f"s3a://{aws_access_key}:{encoded_secret_key}@{S3_BUCKET}",
-        mount_point=MOUNT_POINT
-    )
-    print("Mount successful!")
-
-# Note on Free Community Edition:
-# Mounting via dbutils.fs.mount bridges the Hadoop/S3 authorization layer securely 
-# into Databricks SQL, bypassing the [CONFIG_NOT_AVAILABLE] strict SQL errors.
+# Note: Databricks SQL cells (`%sql`) might still throw [CONFIG_NOT_AVAILABLE]
+# when querying external `s3a://` paths on the Free Tier due to Unity Catalog isolation.
+# To bypass this, we use PySpark to read the Delta table and save it as a managed
+# Databricks table FIRST, which is fully queryable in SQL without auth errors.
 
 # COMMAND ----------
 
@@ -129,20 +123,20 @@ else:
 
 # MAGIC %md
 # MAGIC ## 5. SQL Syntax Example
-# MAGIC We can also use Databricks SQL to query the Delta table using standard SQL syntax, including Time Travel natively in the SQL dialect.
+# MAGIC While you can query the Delta table using standard SQL syntax, Databricks Free Community Edition often blocks 
+# MAGIC external S3 bucket queries in `%sql` cells with `[CONFIG_NOT_AVAILABLE]` due to missing Unity Catalog integration.
+# MAGIC 
+# MAGIC The workaround is to create a DataFrame in Python (which has the keys), and use `createOrReplaceTempView`.
 
 # COMMAND ----------
 
 # Register the table as a temporary view to query it with SQL
-spark.sql(f"CREATE OR REPLACE TEMPORARY VIEW bea_nipa_observations_view USING delta LOCATION '{table_path_bea}'")
-
-# Optionally, you can pass python variables to SQL cells using spark.conf
-spark.conf.set("demo.path", table_path_bea)
+df_bea.createOrReplaceTempView("bea_nipa_observations_view")
 
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC -- Regular SQL query
+# MAGIC -- Regular SQL query (Works because it reads from the PySpark TempView attached to our session keys)
 # MAGIC SELECT period_date, series_name, value, ingested_at
 # MAGIC FROM bea_nipa_observations_view
 # MAGIC ORDER BY ingested_at DESC
@@ -150,11 +144,23 @@ spark.conf.set("demo.path", table_path_bea)
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ### SQL Time Travel Workaround
+# MAGIC The `VERSION AS OF` syntax requires Databricks SQL to query the S3 path directly (which fails auth on Free accounts). 
+# MAGIC To do time travel with SQL on the Free account, just time travel in Python first and expose that specific version as a view!
+
+# COMMAND ----------
+
+# Create a view of Version 0 specifically
+df_v0 = spark.read.format("delta").option("versionAsOf", 0).load(table_path_bea)
+df_v0.createOrReplaceTempView("bea_nipa_v0_view")
+
+# COMMAND ----------
+
 # MAGIC %sql
-# MAGIC -- SQL Time Travel query (using VERSION AS OF)
-# MAGIC -- Here we query the raw files directly by path so we can use VERSION AS OF.
-# MAGIC SELECT *
-# MAGIC FROM delta.`${demo.path}` VERSION AS OF 0
+# MAGIC -- Querying Version 0 using the PySpark Temp View
+# MAGIC SELECT period_date, series_name, value
+# MAGIC FROM bea_nipa_v0_view
 # MAGIC LIMIT 5
 
 # COMMAND ----------
