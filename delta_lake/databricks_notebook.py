@@ -32,20 +32,20 @@ aws_secret_key = dbutils.widgets.get("2_aws_secret_key")
 if not aws_access_key or not aws_secret_key:
     raise ValueError("Please enter your AWS credentials in the widgets at the top of the notebook!")
 
-# The Databricks Free Community Edition restricts both direct AWS credential pass-throughs
-# in Databricks SQL, as well as the 'dbutils.fs.mounts()' API.
-# The most reliable way to read S3 in the Community Edition without mounting
-# is strictly configuring the open-source Hadoop S3A connector on the Spark Context.
+# The Databricks Free Community Edition (and Serverless compute) restricts direct AWS 
+# credential pass-throughs in Databricks SQL to enforce Unity Catalog security.
+# Note: If you are using Databricks Serverless, notebook-level credentials (including
+# spark.sparkContext._jsc) are explicitly blocked. 
+
+# ⚠️ CRITICAL: To run this demo securely on your personal account WITHOUT Unity Catalog:
+# You MUST run this notebook on a "Single User" compute cluster, NOT a Serverless cluster.
 
 DELTA_BASE_PATH = f"s3a://{S3_BUCKET}/delta_lake"
 
-# Set the Hadoop S3A properties directly on the underlying Java SparkContext.
-# Databricks Community Edition filters out `fs.s3a.*` keys from the Python `spark.conf`
-# to enforce Unity Catalog. By setting them on the JVM Hadoop Configuration, we bypass this.
-hadoop_conf = spark.sparkContext._jsc.hadoopConfiguration()
-hadoop_conf.set("fs.s3a.access.key", aws_access_key)
-hadoop_conf.set("fs.s3a.secret.key", aws_secret_key)
-hadoop_conf.set("fs.s3a.endpoint", "s3.amazonaws.com")
+# Set the Hadoop S3A properties for the active Spark Session (Requires Single-User Cluster)
+spark.conf.set("fs.s3a.access.key", aws_access_key)
+spark.conf.set("fs.s3a.secret.key", aws_secret_key)
+spark.conf.set("fs.s3a.endpoint", "s3.amazonaws.com")
 
 # Note: Databricks SQL cells (`%sql`) might still throw [CONFIG_NOT_AVAILABLE]
 # when querying external `s3a://` paths on the Free Tier due to Unity Catalog isolation.
