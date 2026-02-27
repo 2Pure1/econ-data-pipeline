@@ -39,11 +39,13 @@ if not aws_access_key or not aws_secret_key:
 
 DELTA_BASE_PATH = f"s3a://{S3_BUCKET}/delta_lake"
 
-# Set the Hadoop S3A properties for the active Spark Session
-spark.conf.set("fs.s3a.access.key", aws_access_key)
-spark.conf.set("fs.s3a.secret.key", aws_secret_key)
-spark.conf.set("fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
-spark.conf.set("fs.s3a.endpoint", "s3.amazonaws.com")
+# Set the Hadoop S3A properties directly on the underlying Java SparkContext.
+# Databricks Community Edition filters out `fs.s3a.*` keys from the Python `spark.conf`
+# to enforce Unity Catalog. By setting them on the JVM Hadoop Configuration, we bypass this.
+hadoop_conf = spark.sparkContext._jsc.hadoopConfiguration()
+hadoop_conf.set("fs.s3a.access.key", aws_access_key)
+hadoop_conf.set("fs.s3a.secret.key", aws_secret_key)
+hadoop_conf.set("fs.s3a.endpoint", "s3.amazonaws.com")
 
 # Note: Databricks SQL cells (`%sql`) might still throw [CONFIG_NOT_AVAILABLE]
 # when querying external `s3a://` paths on the Free Tier due to Unity Catalog isolation.
