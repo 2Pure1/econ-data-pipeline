@@ -102,12 +102,21 @@ trade_balance as (
 
 -- Spine: all months since 1990
 spine as (
+    {% if target.name == 'duckdb' %}
+    select
+        unnest(generate_series(
+            '1990-01-01'::date,
+            date_trunc('month', current_date)::date,
+            interval '1 month'
+        ))::date as observation_month
+    {% else %}
     select
         generate_series(
             '1990-01-01'::date,
             date_trunc('month', current_date)::date,
             interval '1 month'
         )::date as observation_month
+    {% endif %}
 ),
 
 -- Joined wide table

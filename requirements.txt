@@ -1,12 +1,12 @@
 # ── Core ────────────────────────────────────────────────────
 python-dotenv==1.0.0
-pydantic==2.5.0
-pydantic-settings==2.1.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
 loguru==0.7.2
 tenacity==8.2.3
 
 # ── Data Ingestion ───────────────────────────────────────────
-dlt[postgres,bigquery,filesystem]==0.4.2
+dlt[postgres,bigquery,filesystem]>=1.0.0
 requests==2.31.0
 httpx==0.26.0
 # ── Data Processing ──────────────────────────────────────────

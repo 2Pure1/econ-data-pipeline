@@ -117,4 +117,6 @@ data/
 !requirements.txt
 !*.tfvars.example
 
-config/gcp-credentials.jsondbt_project/profiles.yml
+config/gcp-credentials.json
+dbt_project/profiles.yml
+venv/

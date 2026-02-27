@@ -58,7 +58,7 @@ POSTGRES_URL     = (
 )
 POSTGRES_PROPS = {
     "user":     os.getenv("POSTGRES_USER", "econ_user"),
-    "password": os.getenv("POSTGRES_PASSWORD", ""),
+    "password": os.getenv("POSTGRES_PASSWORD", "localdev"),
     "driver":   "org.postgresql.Driver",
 }
 
@@ -121,7 +121,9 @@ def get_spark() -> SparkSession:
         .config("spark.sql.shuffle.partitions", "8")   # reduce for local dev
         .config("spark.driver.memory", "4g")
     )
-    return configure_spark_with_delta_pip(builder).getOrCreate()
+    return configure_spark_with_delta_pip(
+        builder, extra_packages=["org.postgresql:postgresql:42.6.0"]
+    ).getOrCreate()
 
 
 # ── Delta Writer ──────────────────────────────────────────────────────────────
@@ -280,6 +282,19 @@ class DeltaLakeWriter:
         logger.info(f"  Mode:        {mode}")
 
         df = self.read_from_postgres(cfg["source_table"])
+        
+        # Deduplicate incoming source data to prevent Delta MULTIPLE_SOURCE_ROW_MATCHING errors
+        from pyspark.sql import Window
+        from pyspark.sql.functions import row_number, col
+        
+        w = Window.partitionBy(*cfg["merge_keys"])
+        if "ingested_at" in df.columns:
+            w = w.orderBy(col("ingested_at").desc())
+        else:
+            w = w.orderBy(*[col(k) for k in cfg["merge_keys"]])
+            
+        df = df.withColumn("_rn", row_number().over(w)).filter(col("_rn") == 1).drop("_rn")
+
         self.write_delta(
             df=df,
             delta_path=cfg["delta_path"],

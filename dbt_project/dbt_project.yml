@@ -24,6 +24,10 @@ vars:
   start_year: 1990
   end_year: 2024
 
+on-run-start:
+  - "{% if target.name == 'duckdb' %} INSTALL postgres; LOAD postgres; ATTACH IF NOT EXISTS 'postgresql://{{ env_var('POSTGRES_USER', 'econ_user') }}:{{ env_var('POSTGRES_PASSWORD', 'localdev') }}@{{ env_var('POSTGRES_HOST', 'localhost') }}:{{ env_var('POSTGRES_PORT', '5432') }}/{{ env_var('POSTGRES_DB', 'econ_warehouse') }}' AS econ_analytics (TYPE postgres); {% endif %}"
+
+
 # ── Model Defaults ────────────────────────────────────────────────────────────
 models:
   econ_data_pipeline:
@@ -49,6 +53,3 @@ models:
 # dbt test --select marts    →  run all mart model tests
 
 # ── Seeds ─────────────────────────────────────────────────────────────────────
-seeds:
-  econ_data_pipeline:
-    +schema: seeds

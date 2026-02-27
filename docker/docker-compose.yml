@@ -8,7 +8,9 @@
 # ============================================================
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.8.0-python3.11
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile.airflow
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://econ_user:${POSTGRES_PASSWORD:-localdev}@postgres:5432/airflow_db
@@ -34,10 +36,11 @@ x-airflow-common: &airflow-common
     GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
     DBT_PROFILES_DIR: /app/dbt_project
     DBT_TARGET: dev
+    AIRFLOW_CONN_SLACK_WEBHOOK: ${AIRFLOW_CONN_SLACK_WEBHOOK:-http://:T07Q1NW7VJS%2FB0AHJJW5QSG%2FvKMj4PCyN95GG8BGUCXu3AdV@https%3A%2F%2Fhooks.slack.com}
   volumes:
-    - .:/app
-    - ./airflow/dags:/opt/airflow/dags
-    - ./airflow/plugins:/opt/airflow/plugins
+    - ..:/app
+    - ../airflow/dags:/opt/airflow/dags
+    - ../airflow/plugins:/opt/airflow/plugins
     - airflow-logs:/opt/airflow/logs
   depends_on:
     postgres:

@@ -3,6 +3,8 @@ version: 2
 sources:
   - name: raw
     schema: raw
+    meta:
+      external_location: "postgres_scan('postgresql://{{ env_var('POSTGRES_USER', 'econ_user') }}:{{ env_var('POSTGRES_PASSWORD', 'localdev') }}@{{ env_var('POSTGRES_HOST', 'localhost') }}:{{ env_var('POSTGRES_PORT', '5432') }}/{{ env_var('POSTGRES_DB', 'econ_warehouse') }}', 'raw', '{name}')"
     description: >
       Raw data loaded directly by dlt ingestion pipelines.
       All tables are in append/merge mode — deduplication happens in staging.

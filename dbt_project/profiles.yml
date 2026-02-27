@@ -11,6 +11,10 @@ econ_warehouse:
       path: "{{ env_var('DUCKDB_PATH', '/tmp/econ_analytics.duckdb') }}"
       schema: main
       threads: 4
+      extensions:
+        - postgres
+      settings:
+        pg_experimental_filter_pushdown: true
 
     # ── PostgreSQL (Docker dev + CI) ───────────────────────────────────────
     dev:
@@ -18,7 +22,7 @@ econ_warehouse:
       host: "{{ env_var('POSTGRES_HOST', 'localhost') }}"
       port: "{{ env_var('POSTGRES_PORT', '5432') | int }}"
       user: "{{ env_var('POSTGRES_USER', 'econ_user') }}"
-      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD', 'localdev') }}"
       dbname: "{{ env_var('POSTGRES_DB', 'econ_warehouse') }}"
       schema: marts
       threads: 4
