@@ -122,7 +122,11 @@ def get_spark() -> SparkSession:
         .config("spark.driver.memory", "4g")
     )
     return configure_spark_with_delta_pip(
-        builder, extra_packages=["org.postgresql:postgresql:42.6.0"]
+        builder, extra_packages=[
+            "org.postgresql:postgresql:42.6.0",
+            "org.apache.hadoop:hadoop-aws:3.3.4",
+            "com.amazonaws:aws-java-sdk-bundle:1.12.262"
+        ]
     ).getOrCreate()
 
 

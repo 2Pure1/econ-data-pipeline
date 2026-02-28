@@ -120,3 +120,6 @@ data/
 config/gcp-credentials.json
 dbt_project/profiles.yml
 venv/
+
+.databricks
+databricks.yml

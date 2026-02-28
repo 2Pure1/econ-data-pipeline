@@ -42,10 +42,8 @@ if not aws_access_key or not aws_secret_key:
 
 DELTA_BASE_PATH = f"s3a://{S3_BUCKET}/delta_lake"
 
-# Set the Hadoop S3A properties for the active Spark Session (Requires Single-User Cluster)
-spark.conf.set("fs.s3a.access.key", aws_access_key)
-spark.conf.set("fs.s3a.secret.key", aws_secret_key)
-spark.conf.set("fs.s3a.endpoint", "s3.amazonaws.com")
+# Remove explicit spark.conf.set as Serverless blocks it entirely.
+# We will use boto3 in the next cell instead.
 
 # Note: Databricks SQL cells (`%sql`) might still throw [CONFIG_NOT_AVAILABLE]
 # when querying external `s3a://` paths on the Free Tier due to Unity Catalog isolation.
@@ -60,7 +58,48 @@ spark.conf.set("fs.s3a.endpoint", "s3.amazonaws.com")
 
 # COMMAND ----------
 
-table_path_bea = f"{DELTA_BASE_PATH}/bea/nipa_observations"
+table_path_bea_s3 = f"{DELTA_BASE_PATH}/bea/nipa_observations"
+table_path_bea_local = "/tmp/delta_lake_demo/bea/nipa_observations"
+
+print(f"Syncing Delta table from S3 to local cluster storage to bypass Serverless restrictions...")
+
+# Databricks Serverless blocks AWS pass-throughs. The workaround is downloading the S3 
+# folder to the attached driver node using boto3, then reading it locally with Spark!
+import boto3
+import os
+
+from botocore.config import Config
+
+s3 = boto3.client(
+    's3',
+    endpoint_url='https://s3.us-east-1.amazonaws.com', # Force explicit region endpoint
+    region_name='us-east-1', 
+    aws_access_key_id=aws_access_key,
+    aws_secret_access_key=aws_secret_key,
+    config=Config(
+        s3={'addressing_style': 'path'}, # Force path-style (not virtual-hosted) to avoid DNS drops
+        connect_timeout=60, 
+        read_timeout=60, 
+        retries={'max_attempts': 3}
+    )
+)
+
+def download_s3_folder(bucket_name, s3_folder, local_dir):
+    paginator = s3.get_paginator('list_objects_v2')
+    for result in paginator.paginate(Bucket=bucket_name, Prefix=s3_folder):
+        if 'Contents' not in result:
+            continue
+        for file in result['Contents']:
+            s3_key = file['Key']
+            local_file_path = os.path.join(local_dir, os.path.relpath(s3_key, s3_folder))
+            os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+            s3.download_file(bucket_name, s3_key, local_file_path)
+
+download_s3_folder(S3_BUCKET, "delta_lake/bea/nipa_observations", table_path_bea_local)
+
+print(f"Reading Delta table from local replica: {table_path_bea_local}")
+
+table_path_bea = table_path_bea_local
 
 print(f"Reading Delta table from: {table_path_bea}")
 
@@ -173,9 +212,8 @@ df_v0.createOrReplaceTempView("bea_nipa_v0_view")
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC -- OPTIMIZE compacts files
-# MAGIC OPTIMIZE delta.`${demo.path}` ZORDER BY (table_key, series_name);
-# MAGIC 
-# MAGIC -- VACUUM removes files older than the retention period (default 7 days)
-# MAGIC -- VACUUM delta.`${demo.path}` RETAIN 168 HOURS;
+# Run OPTIMIZE to compact files
+spark.sql(f"OPTIMIZE delta.`{table_path_bea}` ZORDER BY (table_key, series_name)")
+
+# VACUUM removes files older than the retention period (default 7 days)
+# spark.sql(f"VACUUM delta.`{table_path_bea}` RETAIN 168 HOURS")
