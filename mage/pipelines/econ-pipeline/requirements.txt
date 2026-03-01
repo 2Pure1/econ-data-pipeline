@@ -1,0 +1,26 @@
+# Mage project dependencies for macro_ingestion_pipeline
+# Install automatically when Mage starts: pip install -r requirements.txt
+
+# Data manipulation
+pandas>=2.0,<2.2           # <2.2 required for Mage 0.9.x Jinja2 compatibility
+pyarrow>=14.0              # Parquet writes in export_to_delta block
+
+# HTTP client (FRED & BEA API calls)
+requests>=2.31
+
+# Database
+sqlalchemy>=1.4,<2.0       # Mage 0.9.x ships with SQLAlchemy 1.4
+psycopg2-binary>=2.9       # PostgreSQL adapter for export_to_postgres block
+
+# Logging
+loguru>=0.7
+
+# AWS S3 (for Delta Lake export path)
+boto3>=1.34
+
+# Data ingestion framework
+dlt>=1.0
+
+# Utilities
+python-dotenv>=1.0
+tenacity>=8.0

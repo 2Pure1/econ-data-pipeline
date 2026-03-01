@@ -1,0 +1,227 @@
+blocks:
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - validate_and_merge
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: Load BEA GDP Data
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_loader
+  upstream_blocks: []
+  uuid: load_bea_gdp_data
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - validate_and_merge
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_fred_monetary_data
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_loader
+  upstream_blocks: []
+  uuid: load_fred_monetary_data
+- all_upstream_blocks_executed: true
+  color: null
+  configuration: {}
+  downstream_blocks:
+  - load_to_postgressql
+  - load_to_delta_lake
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: validate_and_merge
+  retry_config: null
+  status: updated
+  timeout: null
+  type: transformer
+  upstream_blocks:
+  - load_fred_monetary_data
+  - load_bea_gdp_data
+  uuid: validate_and_merge
+- all_upstream_blocks_executed: false
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_to_PostgresSQL
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - validate_and_merge
+  uuid: load_to_postgressql
+- all_upstream_blocks_executed: false
+  color: null
+  configuration: {}
+  downstream_blocks: []
+  executor_config: null
+  executor_type: local_python
+  has_callback: false
+  language: python
+  name: load_to_delta_lake
+  retry_config: null
+  status: executed
+  timeout: null
+  type: data_exporter
+  upstream_blocks:
+  - validate_and_merge
+  uuid: load_to_delta_lake
+cache_block_output_in_memory: false
+callbacks: []
+concurrency_config: {}
+conditionals: []
+created_at: '2026-03-01 16:50:23.204702+00:00'
+data_integration: null
+description: "\"\"\"\nmage/pipelines/macro_ingestion_pipeline.py\n------------------------------------------\n\
+  Mage.ai alternative orchestration for the macro data pipeline.\n\nMage vs Airflow\
+  \ — key differences:\n  Airflow: mature, battle-tested, verbose DAG syntax, strong\
+  \ ecosystem\n  Mage:    modern UI, notebook-style blocks, built-in data preview,\n\
+  \           easier local development, native dbt integration, faster iteration\n\
+  \nBoth are included in this project to demonstrate awareness of the\ncurrent orchestration\
+  \ landscape. Production choice depends on:\n  - Team size (Mage is faster for small\
+  \ teams)\n  - Existing infrastructure (Airflow if already invested)\n  - Need for\
+  \ notebook-style debugging (Mage wins here)\n\nTo run Mage locally:\n    pip install\
+  \ mage-ai\n    mage start econ-data-pipeline\n    # Then open http://localhost:6789\n\
+  \nThis file follows Mage's block-based pipeline structure:\n  @data_loader   → extract\n\
+  \  @transformer   → transform / validate\n  @data_exporter → load to destination\n\
+  \"\"\"\n\nfrom __future__ import annotations\n\nimport os\nimport sys\nsys.path.insert(0,\
+  \ os.path.join(os.path.dirname(__file__), \"../..\"))\n\nimport pandas as pd\nfrom\
+  \ loguru import logger\n\n# Mage decorators — only available inside a Mage runtime\n\
+  # Wrapped in try/except so the file is importable outside Mage too\ntry:\n    from\
+  \ mage_ai.data_preparation.decorators import (\n        data_loader,\n        transformer,\n\
+  \        data_exporter,\n        test,\n    )\n    MAGE_AVAILABLE = True\nexcept\
+  \ ImportError:\n    # Define no-op decorators for standalone use\n    def data_loader(f):\
+  \   return f\n    def transformer(f):   return f\n    def data_exporter(f): return\
+  \ f\n    def test(f):          return f\n    MAGE_AVAILABLE = False\n\n\n# ── Block\
+  \ 1: Load BEA GDP Data ───────────────────────────────────────────────\n\n@data_loader\n\
+  def load_bea_gdp(*args, **kwargs) -> pd.DataFrame:\n    \"\"\"\n    DATA LOADER\
+  \ BLOCK\n    Fetch BEA GDP and components from the NIPA API.\n    In Mage UI: shows\
+  \ a live data preview after execution.\n    \"\"\"\n    from ingestion.bea_pipeline\
+  \ import BEAClient, NIPA_TABLES, parse_bea_period\n    from ingestion.base_pipeline\
+  \ import safe_float\n    from datetime import date\n\n    client = BEAClient()\n\
+  \    table_cfg = NIPA_TABLES[\"gdp_and_components\"]\n    line_map  = table_cfg[\"\
+  lines\"]\n\n    current_year = date.today().year\n    year_range   = \",\".join(str(y)\
+  \ for y in range(2010, current_year + 1))\n\n    results = client.get_nipa(\n  \
+  \      table_name=table_cfg[\"table_name\"],\n        frequency=table_cfg[\"frequency\"\
+  ],\n        year=year_range,\n    )\n\n    records = []\n    for obs in results.get(\"\
+  Data\", []):\n        line_num = int(obs.get(\"LineNumber\", -1))\n        if line_num\
+  \ not in line_map:\n            continue\n        period_date = parse_bea_period(obs[\"\
+  TimePeriod\"], table_cfg[\"frequency\"])\n        if not period_date:\n        \
+  \    continue\n        raw_val = obs.get(\"DataValue\", \"\")\n        value   =\
+  \ None if raw_val in (\"\", \"(D)\", \"(NA)\") else safe_float(raw_val.replace(\"\
+  ,\", \"\"))\n        records.append({\n            \"series_name\":  line_map[line_num],\n\
+  \            \"period_date\":  pd.to_datetime(period_date),\n            \"value\"\
+  :        value,\n            \"source\":       \"bea\",\n            \"frequency\"\
+  :    table_cfg[\"frequency\"],\n        })\n\n    df = pd.DataFrame(records)\n \
+  \   logger.info(f\"Loaded {len(df):,} BEA GDP records\")\n    return df\n\n\n# ──\
+  \ Block 2: Load FRED Monetary Data ─────────────────────────────────────────\n\n\
+  @data_loader\ndef load_fred_monetary(*args, **kwargs) -> pd.DataFrame:\n    \"\"\
+  \"\n    DATA LOADER BLOCK\n    Fetch Fed Funds Rate, M2, and yield curve from FRED.\n\
+  \    Runs in parallel with load_bea_gdp in the Mage DAG.\n    \"\"\"\n    import\
+  \ requests\n    from ingestion.base_pipeline import cfg, safe_float, normalize_date\n\
+  \n    series = [\"FEDFUNDS\", \"M2SL\", \"T10Y2Y\", \"CPIAUCSL\"]\n    records =\
+  \ []\n\n    for series_id in series:\n        resp = requests.get(\n           \
+  \ \"https://api.stlouisfed.org/fred/series/observations\",\n            params={\n\
+  \                \"series_id\":          series_id,\n                \"api_key\"\
+  :            cfg.FRED_API_KEY,\n                \"file_type\":          \"json\"\
+  ,\n                \"observation_start\":  \"2010-01-01\",\n                \"sort_order\"\
+  :         \"asc\",\n            },\n            timeout=30,\n        )\n       \
+  \ resp.raise_for_status()\n        for obs in resp.json().get(\"observations\",\
+  \ []):\n            val = obs.get(\"value\", \".\")\n            records.append({\n\
+  \                \"series_id\":        series_id,\n                \"observation_date\"\
+  : pd.to_datetime(obs[\"date\"]),\n                \"value\":            None if\
+  \ val == \".\" else safe_float(val),\n                \"source\":           \"fred\"\
+  ,\n            })\n\n    df = pd.DataFrame(records)\n    logger.info(f\"Loaded {len(df):,}\
+  \ FRED monetary records\")\n    return df\n\n\n# ── Block 3: Validate & Merge ─────────────────────────────────────────────────\n\
+  \n@transformer\ndef validate_and_merge(bea_df: pd.DataFrame, fred_df: pd.DataFrame,\
+  \ *args, **kwargs) -> pd.DataFrame:\n    \"\"\"\n    TRANSFORMER BLOCK\n    Validate\
+  \ each source independently, then merge into a monthly summary.\n    Mage shows\
+  \ a diff of the DataFrame before/after this block.\n    \"\"\"\n    # ── Validate\
+  \ BEA ──────────────────────────────────────────────────────────\n    assert not\
+  \ bea_df.empty,                    \"BEA DataFrame is empty\"\n    assert \"series_name\"\
+  \ in bea_df.columns,     \"BEA missing series_name column\"\n    assert bea_df[\"\
+  value\"].notna().mean() > 0.8, \"BEA has too many null values (>20%)\"\n\n    #\
+  \ ── Validate FRED ─────────────────────────────────────────────────────────\n \
+  \   assert not fred_df.empty,                      \"FRED DataFrame is empty\"\n\
+  \    assert set([\"FEDFUNDS\", \"M2SL\"]).issubset(\n        fred_df[\"series_id\"\
+  ].unique()\n    ), \"Expected FRED series missing\"\n\n    # ── Pivot BEA to wide\
+  \ ─────────────────────────────────────────────────────\n    bea_wide = (\n    \
+  \    bea_df[bea_df[\"series_name\"].isin([\"gdp\", \"personal_consumption_expenditures\"\
+  ])]\n        .pivot_table(index=\"period_date\", columns=\"series_name\", values=\"\
+  value\", aggfunc=\"last\")\n        .reset_index()\n        .rename(columns={\"\
+  period_date\": \"month\", \"gdp\": \"gdp_billions\",\n                         \"\
+  personal_consumption_expenditures\": \"pce_billions\"})\n    )\n    bea_wide[\"\
+  month\"] = bea_wide[\"month\"].dt.to_period(\"M\").dt.to_timestamp()\n\n    # ──\
+  \ Pivot FRED to wide ────────────────────────────────────────────────────\n    fred_wide\
+  \ = (\n        fred_df\n        .assign(month=lambda x: x[\"observation_date\"].dt.to_period(\"\
+  M\").dt.to_timestamp())\n        .pivot_table(index=\"month\", columns=\"series_id\"\
+  , values=\"value\", aggfunc=\"last\")\n        .reset_index()\n        .rename(columns={\n\
+  \            \"FEDFUNDS\": \"fed_funds_rate\",\n            \"M2SL\":     \"m2_billions\"\
+  ,\n            \"T10Y2Y\":   \"yield_curve_spread\",\n            \"CPIAUCSL\":\
+  \ \"cpi\",\n        })\n    )\n\n    # ── Merge on month ────────────────────────────────────────────────────────\n\
+  \    merged = bea_wide.merge(fred_wide, on=\"month\", how=\"outer\").sort_values(\"\
+  month\")\n\n    # Derived features\n    merged[\"cpi_yoy_pct\"] = merged[\"cpi\"\
+  ].pct_change(12) * 100\n    merged[\"yield_curve_inverted\"] = merged[\"yield_curve_spread\"\
+  ] < 0\n\n    logger.info(f\"Merged DataFrame: {len(merged):,} rows × {len(merged.columns)}\
+  \ columns\")\n    return merged\n\n\n# ── Block 4: Load to PostgreSQL ───────────────────────────────────────────────\n\
+  \n@data_exporter\ndef export_to_postgres(df: pd.DataFrame, *args, **kwargs) -> None:\n\
+  \    \"\"\"\n    DATA EXPORTER BLOCK\n    Write the merged DataFrame to PostgreSQL.\n\
+  \    In Mage: shows row counts and column types after export.\n    \"\"\"\n    from\
+  \ sqlalchemy import create_engine\n\n    engine = create_engine(\n        f\"postgresql://{os.getenv('POSTGRES_USER','econ_user')}:\"\
+  \n        f\"{os.getenv('POSTGRES_PASSWORD','')}@\"\n        f\"{os.getenv('POSTGRES_HOST','localhost')}:\"\
+  \n        f\"{os.getenv('POSTGRES_PORT','5432')}/\"\n        f\"{os.getenv('POSTGRES_DB','econ_warehouse')}\"\
+  \n    )\n\n    df.to_sql(\n        name=\"mage_macro_summary\",\n        schema=\"\
+  raw\",\n        con=engine,\n        if_exists=\"replace\",\n        index=False,\n\
+  \        chunksize=1000,\n    )\n    logger.success(f\"Exported {len(df):,} rows\
+  \ → raw.mage_macro_summary\")\n\n\n# ── Block 5: Load to Delta Lake ───────────────────────────────────────────────\n\
+  \n@data_exporter\ndef export_to_delta(df: pd.DataFrame, *args, **kwargs) -> None:\n\
+  \    \"\"\"\n    DATA EXPORTER BLOCK\n    Write the merged DataFrame to Delta Lake\
+  \ (alongside the Postgres export).\n    Demonstrates Mage's ability to fan-out to\
+  \ multiple destinations.\n    \"\"\"\n    delta_path = os.path.join(\n        os.getenv(\"\
+  DELTA_S3_PATH\", \"/tmp/delta_lake\"), \"mage/macro_summary\"\n    )\n    df.to_parquet(f\"\
+  {delta_path}/data.parquet\", index=False)\n    logger.success(f\"Exported {len(df):,}\
+  \ rows → {delta_path}\")\n\n\n# ── Tests ─────────────────────────────────────────────────────────────────────\n\
+  \n@test\ndef test_output_not_empty(df: pd.DataFrame, *args) -> None:\n    \"\"\"\
+  Assert the merged output is not empty.\"\"\"\n    assert df is not None and len(df)\
+  \ > 0, \"Output DataFrame is empty\"\n\n\n@test\ndef test_required_columns_present(df:\
+  \ pd.DataFrame, *args) -> None:\n    \"\"\"Assert key columns exist in the output.\"\
+  \"\"\n    required = {\"month\", \"gdp_billions\", \"fed_funds_rate\", \"yield_curve_inverted\"\
+  }\n    missing  = required - set(df.columns)\n    assert not missing, f\"Missing\
+  \ columns: {missing}\"\n\n\n@test\ndef test_no_future_dates(df: pd.DataFrame, *args)\
+  \ -> None:\n    \"\"\"Assert no observation dates are in the future (look-ahead\
+  \ bias check).\"\"\"\n    from datetime import date\n    if \"month\" in df.columns:\n\
+  \        max_date = pd.to_datetime(df[\"month\"]).max().date()\n        assert max_date\
+  \ <= date.today(), f\"Future date found: {max_date}\"\n"
+executor_config: {}
+executor_count: 1
+executor_type: null
+extensions: {}
+name: macro_ingestion_2p1
+notification_config: {}
+remote_variables_dir: null
+retry_config: {}
+run_pipeline_in_one_process: false
+settings:
+  triggers: null
+spark_config: {}
+tags: []
+type: python
+uuid: macro_ingestion_2p1
+variables_dir: /home/pure/.mage_data/econ-pipeline
+widgets: []

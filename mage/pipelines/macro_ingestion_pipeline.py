@@ -29,7 +29,13 @@ from __future__ import annotations
 
 import os
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
+# Walk up from __file__ to find the project root (dir containing `ingestion/`)
+import pathlib as _pathlib
+for _p in [_pathlib.Path(__file__).resolve()] + list(_pathlib.Path(__file__).resolve().parents):
+    if (_p / "ingestion").is_dir():
+        if str(_p) not in sys.path:
+            sys.path.insert(0, str(_p))
+        break
 
 import pandas as pd
 from loguru import logger

@@ -39,7 +39,7 @@ from typing import Generator
 import requests
 from loguru import logger
 
-from base_pipeline import BasePipeline, cfg, normalize_date, safe_float
+from ingestion.base_pipeline import BasePipeline, cfg, normalize_date, safe_float
 
 
 # ── BLS Series Config ─────────────────────────────────────────────────────────

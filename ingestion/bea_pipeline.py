@@ -33,7 +33,7 @@ from typing import Generator
 import requests
 from loguru import logger
 
-from base_pipeline import BasePipeline, cfg, normalize_date, safe_float
+from ingestion.base_pipeline import BasePipeline, cfg, normalize_date, safe_float
 
 BEA_BASE_URL = "https://apps.bea.gov/api/data"
 BEA_API_KEY  = os.getenv("BEA_API_KEY", "")

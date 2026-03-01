@@ -62,19 +62,34 @@ class DuckDBAnalytics:
 
     def __init__(self, db_path: str = DUCKDB_PATH):
         self.conn = duckdb.connect(db_path)
+        
+        # Enable S3 support
+        if DELTA_BASE_PATH.startswith("s3"):
+            self.conn.execute("INSTALL httpfs;")
+            self.conn.execute("LOAD httpfs;")
+            # Replaces s3a:// with s3:// for DuckDB globbing
+            self.conn.execute("SET s3_endpoint='s3.us-east-1.amazonaws.com';")
+            self.conn.execute(f"SET s3_access_key_id='{os.getenv('AWS_ACCESS_KEY_ID')}';")
+            self.conn.execute(f"SET s3_secret_access_key='{os.getenv('AWS_SECRET_ACCESS_KEY')}';")
+            self.conn.execute(f"SET s3_region='{os.getenv('AWS_DEFAULT_REGION', 'us-east-1')}';")
         self._register_tables()
         logger.info(f"DuckDB connected: {db_path}")
 
     def _register_tables(self) -> None:
         """Register Delta Lake Parquet directories as DuckDB views."""
         for name, path in TABLES.items():
-            parquet_glob = f"{path}/**/*.parquet"
-            if Path(path).exists() or path.startswith("s3://"):
-                self.conn.execute(f"""
-                    CREATE OR REPLACE VIEW {name} AS
-                    SELECT * FROM read_parquet('{parquet_glob}', hive_partitioning=true)
-                """)
-                logger.debug(f"Registered view: {name} → {parquet_glob}")
+            # DuckDB httpfs expects s3:// instead of Spark's s3a://
+            duckdb_path = path.replace("s3a://", "s3://")
+            parquet_glob = f"{duckdb_path}/**/*.parquet"
+            if Path(path).exists() or path.startswith("s3://") or path.startswith("s3a://"):
+                try:
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE VIEW {name} AS
+                        SELECT * FROM read_parquet('{parquet_glob}', hive_partitioning=true)
+                    """)
+                    logger.debug(f"Registered view: {name} → {parquet_glob}")
+                except Exception as e:
+                    logger.warning(f"Could not register view {name}: {e}")
             else:
                 logger.warning(f"Path not found, skipping view: {name} ({path})")
 
@@ -105,12 +120,12 @@ class DuckDBAnalytics:
         sql = """
             SELECT
                 year,
-                ROUND(AVG(unemployment_rate), 3)         AS avg_unemployment,
-                ROUND(AVG(cpi_yoy_pct), 3)               AS avg_cpi_yoy,
-                ROUND(AVG(fed_funds_rate), 3)             AS avg_fed_funds,
-                ROUND(AVG(yield_curve_spread_10y2y), 3)  AS avg_yield_spread,
-                ROUND(AVG(sp500_realised_vol), 3)         AS avg_sp500_vol,
-                COUNT(*)                                  AS months
+                ROUND(AVG(unemployment_rate), 3)              AS avg_unemployment,
+                ROUND(AVG(cpi_yoy_pct), 3)                    AS avg_cpi_yoy,
+                ROUND(AVG(fed_funds_rate), 3)                  AS avg_fed_funds,
+                ROUND(AVG(core_pce_yoy_pct), 3)               AS avg_core_pce,
+                ROUND(AVG(nonfarm_payrolls_mom_change), 0)     AS avg_payrolls_mom,
+                COUNT(*)                                       AS months
             FROM macro_monthly
             WHERE is_complete_record = true
             GROUP BY year
@@ -154,36 +169,36 @@ class DuckDBAnalytics:
     def recession_analysis(self) -> pd.DataFrame:
         """
         Identify recession-adjacent periods using classic indicators:
-        yield curve inversion, rising unemployment, falling real GDP.
+        rising unemployment, falling real GDP, and elevated CPI.
+        Note: yield curve / VIX columns are not in the current mart schema.
         """
         sql = """
             WITH signals AS (
                 SELECT
                     observation_month,
                     year,
-                    real_gdp_qoq_pct,
+                    real_gdp_billions,
+                    real_gdp_billions - LAG(real_gdp_billions, 1)
+                        OVER (ORDER BY observation_month)          AS gdp_qoq_change,
                     unemployment_rate,
                     unemployment_rate - LAG(unemployment_rate, 3)
-                        OVER (ORDER BY observation_month)        AS unemployment_3m_change,
+                        OVER (ORDER BY observation_month)          AS unemployment_3m_change,
                     cpi_yoy_pct,
+                    core_pce_yoy_pct,
                     fed_funds_rate,
-                    real_fed_funds_rate,
-                    yield_curve_spread_10y2y,
-                    yield_curve_inverted,
-                    vix_avg,
-                    personal_saving_rate_pct
+                    nonfarm_payrolls_mom_change
                 FROM macro_monthly
                 WHERE is_complete_record = true
             )
             SELECT *,
                 CASE
-                    WHEN yield_curve_inverted
-                     AND unemployment_3m_change > 0.3
+                    WHEN unemployment_3m_change > 0.5
+                     AND gdp_qoq_change < 0
                     THEN true ELSE false
                 END AS recession_risk_flag
             FROM signals
-            WHERE yield_curve_inverted = true
-               OR real_gdp_qoq_pct < -1.0
+            WHERE unemployment_3m_change > 0.5
+               OR gdp_qoq_change < 0
             ORDER BY observation_month
         """
         return self.query(sql)
