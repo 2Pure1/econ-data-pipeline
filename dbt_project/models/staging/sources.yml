@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: raw
-    schema: raw
+    schema: "{{ env_var('DBT_SOURCES_SCHEMA', 'raw') }}"
     meta:
       external_location: "postgres_scan('postgresql://{{ env_var('POSTGRES_USER', 'econ_user') }}:{{ env_var('POSTGRES_PASSWORD', 'localdev') }}@{{ env_var('POSTGRES_HOST', 'localhost') }}:{{ env_var('POSTGRES_PORT', '5432') }}/{{ env_var('POSTGRES_DB', 'econ_warehouse') }}', 'raw', '{name}')"
     description: >
@@ -12,11 +12,10 @@ sources:
     # Source freshness checks (run with: dbt source freshness)
     loaded_at_field: ingested_at
     freshness:
-      warn_after: {count: 1, period: day}
-      error_after: {count: 3, period: day}
+      warn_after: { count: 1, period: day }
+      error_after: { count: 3, period: day }
 
     tables:
-
       - name: fred_observations
         description: >
           FRED macroeconomic series observations loaded by fred_pipeline.py.
@@ -66,5 +65,3 @@ sources:
             description: "Data frequency: A (annual), Q (quarterly), M (monthly)"
           - name: ingested_at
             description: "UTC timestamp when dlt loaded this record"
-
-

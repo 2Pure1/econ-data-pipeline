@@ -28,11 +28,16 @@ final as (
 
         -- Date columns: cast to DATE and derive spine columns
         cast(observation_date as date)                                  as observation_date,
+        {% if target.type == 'bigquery' %}
+        date_trunc(cast(observation_date as date), MONTH)               as observation_month,
+        date_trunc(cast(observation_date as date), QUARTER)             as observation_quarter,
+        {% else %}
         cast(date_trunc('month',  cast(observation_date as date)) as date) as observation_month,
         cast(date_trunc('quarter', cast(observation_date as date)) as date) as observation_quarter,
+        {% endif %}
 
         -- Value
-        cast(value as float)                                            as value,
+        cast(value as {{ dbt.type_float() }})                           as value,
         coalesce(value_is_missing, value is null)                       as is_missing,
 
         -- Series metadata

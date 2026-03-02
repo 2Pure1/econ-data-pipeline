@@ -109,11 +109,19 @@ spine as (
             date_trunc('month', current_date)::date,
             interval '1 month'
         ))::date as observation_month
+    {% elif target.type == 'bigquery' %}
+    select
+        observation_month
+    from unnest(generate_date_array(
+        '1990-01-01',
+        date_trunc(current_date(), month),
+        interval 1 month
+    )) as observation_month
     {% else %}
     select
         generate_series(
-            '1990-01-01'::date,
-            date_trunc('month', current_date)::date,
+            cast('1990-01-01' as date),
+            cast(date_trunc('month', current_date) as date),
             interval '1 month'
         )::date as observation_month
     {% endif %}
@@ -123,9 +131,15 @@ spine as (
 joined as (
     select
         s.observation_month,
+        {% if target.type == 'bigquery' %}
+        extract(year from s.observation_month)              as year,
+        extract(month from s.observation_month)             as month,
+        date_trunc(s.observation_month, QUARTER)            as quarter,
+        {% else %}
         extract(year from s.observation_month)::int         as year,
         extract(month from s.observation_month)::int        as month,
         date_trunc('quarter', s.observation_month)::date    as quarter,
+        {% endif %}
 
         -- Output
         g.gdp_billions_usd,
@@ -139,14 +153,14 @@ joined as (
 
         -- Computed: YoY inflation rates
         round(
-            (100.0 * (c.cpi_all_urban - lag(c.cpi_all_urban, 12) over (order by s.observation_month))
-            / nullif(lag(c.cpi_all_urban, 12) over (order by s.observation_month), 0))::numeric,
+            cast(100.0 * (c.cpi_all_urban - lag(c.cpi_all_urban, 12) over (order by s.observation_month))
+            / nullif(lag(c.cpi_all_urban, 12) over (order by s.observation_month), 0) as {{ dbt.type_numeric() }}),
             2
         )                                                   as cpi_yoy_pct,
 
         round(
-            (100.0 * (cp.core_pce - lag(cp.core_pce, 12) over (order by s.observation_month))
-            / nullif(lag(cp.core_pce, 12) over (order by s.observation_month), 0))::numeric,
+            cast(100.0 * (cp.core_pce - lag(cp.core_pce, 12) over (order by s.observation_month))
+            / nullif(lag(cp.core_pce, 12) over (order by s.observation_month), 0) as {{ dbt.type_numeric() }}),
             2
         )                                                   as core_pce_yoy_pct,
 

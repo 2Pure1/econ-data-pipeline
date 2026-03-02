@@ -124,6 +124,39 @@ services:
     volumes:
       - .:/app
     command: tail -f /dev/null # Keep alive for manual execution
+    networks:
+      - econ-net
+
+  # ── Kestra ───────────────────────────────────────────────────────────────
+  kestra:
+    image: kestra/kestra:v1.2.8
+    user: root
+    command: server local
+    ports:
+      - "8085:8080"
+    environment:
+      # UI Credentials
+      KESTRA_SERVER_BASIC_AUTH_USERNAME: "admin@bey-zone.com"
+      KESTRA_SERVER_BASIC_AUTH_PASSWORD: "beybeyB34"
+      # Postgres Backend
+      KESTRA_DATASOURCES_POSTGRES_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-econ_warehouse}
+      KESTRA_DATASOURCES_POSTGRES_USERNAME: ${POSTGRES_USER:-econ_user}
+      KESTRA_DATASOURCES_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+      # Pipeline Secrets (using ENV_ prefix for Kestra OSS compatibility)
+      ENV_BEA_API_KEY: ${BEA_API_KEY:-}
+      ENV_FRED_API_KEY: ${FRED_API_KEY:-}
+      ENV_BLS_API_KEY: ${BLS_API_KEY:-}
+      ENV_AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      ENV_AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      ENV_DELTA_S3_PATH: ${DELTA_S3_PATH:-}
+      ENV_POSTGRES_HOST: "postgres"
+      ENV_POSTGRES_DB: "${POSTGRES_DB:-econ_warehouse}"
+      ENV_POSTGRES_USER: "${POSTGRES_USER:-econ_user}"
+      ENV_POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-localdev}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./tmp:/tmp
+      - ..:/project
     depends_on:
       postgres:
         condition: service_healthy

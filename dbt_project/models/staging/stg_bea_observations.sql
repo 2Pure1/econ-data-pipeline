@@ -29,7 +29,7 @@ final as (
         cast(period_date as date)                                       as period_date,
 
         -- Value
-        cast(value as float)                                            as value,
+        cast(value as {{ dbt.type_float() }})                           as value,
         coalesce(is_missing, value is null)                             as is_missing,
 
         -- BEA metadata
